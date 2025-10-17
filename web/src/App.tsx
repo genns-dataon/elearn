@@ -11,14 +11,12 @@ import {
   List,
   Avatar,
   Tag,
-  Drawer,
   Menu,
   Switch,
   Typography,
   Divider,
   Space,
   message,
-  Spin,
   Empty,
   Badge,
   Tooltip,
@@ -31,7 +29,6 @@ import {
   SendOutlined,
   LeftOutlined,
   RightOutlined,
-  MenuOutlined,
   MessageOutlined,
   BookOutlined,
   RobotOutlined,
@@ -42,7 +39,6 @@ import {
   ReadOutlined,
   SoundOutlined,
 } from '@ant-design/icons'
-import type { UploadFile } from 'antd'
 import axios from 'axios'
 
 const { Header, Content, Sider } = Layout
@@ -99,7 +95,6 @@ function App() {
   const [generateImages, setGenerateImages] = useState(false)
   const [generateVoiceover, setGenerateVoiceover] = useState(false)
   const [generateQuestions, setGenerateQuestions] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(true)
   const [notesVisible, setNotesVisible] = useState(false)
   const [questions, setQuestions] = useState<Question[]>([])
