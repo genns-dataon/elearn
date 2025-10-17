@@ -45,7 +45,7 @@ const { Header, Content, Sider } = Layout
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 interface Slide {
   id: string
@@ -422,8 +422,7 @@ function App() {
                             type="default"
                             icon={<SoundOutlined />}
                             onClick={() => {
-                              const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:8080'
-                              const audio = new Audio(`${baseUrl}${slides[currentSlide].audio_url}`)
+                              const audio = new Audio(slides[currentSlide].audio_url)
                               audio.play()
 
                               // Auto-advance to next slide when audio finishes
