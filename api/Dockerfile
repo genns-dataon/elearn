@@ -7,8 +7,8 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
-COPY . .
+# Copy api source code
+COPY api/ ./
 
 # Build the application
 RUN CGO_ENABLED=1 GOOS=linux go build -o main .
