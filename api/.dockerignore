@@ -1,0 +1,8 @@
+storage/
+*.db
+.env
+.git
+.gitignore
+README.md
+Makefile
+*.md
