@@ -124,6 +124,9 @@ func (o *OpenAIProvider) GenerateText(prompt string, systemPrompt string) (strin
 			{"role": "user", "content": prompt},
 		},
 		"max_tokens": 4096,
+		"response_format": map[string]string{
+			"type": "json_object",
+		},
 	}
 
 	jsonData, err := json.Marshal(reqBody)
