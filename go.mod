@@ -1,6 +1,6 @@
 module github.com/local/elearn
 
-go 1.25.1
+go 1.23
 
 require (
 	github.com/bytedance/sonic v1.14.0 // indirect
