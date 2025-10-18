@@ -270,6 +270,18 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 		return
 	}
 
+	// Debug log to see what was parsed
+	if len(courseStructure.Slides) > 0 {
+		log.Info().
+			Int("total_slides", len(courseStructure.Slides)).
+			Str("first_slide_title", courseStructure.Slides[0].Title).
+			Int("first_slide_number", courseStructure.Slides[0].SlideNumber).
+			Int("content_length", len(courseStructure.Slides[0].Content)).
+			Msg("Parsed course structure")
+	} else {
+		log.Warn().Msg("No slides in parsed structure")
+	}
+
 	if err := h.db.Model(&models.Course{}).Where("id = ?", req.CourseID).Updates(map[string]interface{}{
 		"title":       courseStructure.Title,
 		"description": courseStructure.Description,
