@@ -233,12 +233,7 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 		language = "english"
 	}
 
-	userPrompt := fmt.Sprintf("Generate a course with %d slides from this content:\n\n%s", req.NumSlides, contentBuilder.String())
-	if req.GenerateQuestions {
-		userPrompt += "\n\nIMPORTANT: Include a 'question' field for each slide with a multiple choice question."
-	}
-
-	// Add language instruction to user prompt
+	// Add language instruction to system prompt (stronger enforcement)
 	if language != "english" {
 		languageMap := map[string]string{
 			"indonesian": "Indonesian (Bahasa Indonesia)",
@@ -246,8 +241,14 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 			"german":     "German",
 		}
 		if langName, ok := languageMap[language]; ok {
-			userPrompt += fmt.Sprintf("\n\nIMPORTANT: Generate ALL content (titles, slide content, instructor scripts, and questions) in %s. Do NOT use English for the course content.", langName)
+			languageInstruction := fmt.Sprintf("\n\n**CRITICAL LANGUAGE REQUIREMENT:**\nYou MUST generate ALL course content in %s language ONLY.\nThis includes:\n- Course title and description\n- All slide titles\n- All slide content\n- All instructor scripts\n- All quiz questions and options\n\nDo NOT use English anywhere in the course content. The ENTIRE course must be in %s.", langName, langName)
+			systemPromptStr += languageInstruction
 		}
+	}
+
+	userPrompt := fmt.Sprintf("Generate a course with %d slides from this content:\n\n%s", req.NumSlides, contentBuilder.String())
+	if req.GenerateQuestions {
+		userPrompt += "\n\nIMPORTANT: Include a 'question' field for each slide with a multiple choice question."
 	}
 
 	response, err := h.aiProvider.GenerateText(userPrompt, systemPromptStr)
