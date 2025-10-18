@@ -268,18 +268,19 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 
 	var courseStructure GeneratedCourseStructure
 
-	// Try to parse directly first
-	if err := json.Unmarshal([]byte(response), &courseStructure); err != nil {
-		// If that fails, try parsing with "course" wrapper
-		var wrappedResponse struct {
-			Course GeneratedCourseStructure `json:"course"`
-		}
-		if err := json.Unmarshal([]byte(response), &wrappedResponse); err != nil {
+	// OpenAI wraps response in "course" object, try that first
+	var wrappedResponse struct {
+		Course GeneratedCourseStructure `json:"course"`
+	}
+	if err := json.Unmarshal([]byte(response), &wrappedResponse); err == nil && len(wrappedResponse.Course.Slides) > 0 {
+		courseStructure = wrappedResponse.Course
+	} else {
+		// Fall back to direct parsing (for Anthropic)
+		if err := json.Unmarshal([]byte(response), &courseStructure); err != nil {
 			log.Error().Err(err).Str("response", response).Msg("Failed to parse course JSON")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse generated course"})
 			return
 		}
-		courseStructure = wrappedResponse.Course
 	}
 
 	// Debug log to see what was parsed
