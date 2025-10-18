@@ -263,6 +263,9 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
+	// Log first 500 chars of response to debug
+	log.Info().Str("response_preview", response[:min(500, len(response))]).Msg("AI response received")
+
 	var courseStructure GeneratedCourseStructure
 	if err := json.Unmarshal([]byte(response), &courseStructure); err != nil {
 		log.Error().Err(err).Str("response", response).Msg("Failed to parse course JSON")
