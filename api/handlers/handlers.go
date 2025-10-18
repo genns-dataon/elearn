@@ -251,7 +251,7 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 		userPrompt += "\n\nIMPORTANT: Include a 'question' field for each slide with a multiple choice question."
 	}
 
-	response, err := h.aiProvider.GenerateText(userPrompt, systemPromptStr)
+	response, err := h.aiProvider.GenerateJSON(userPrompt, systemPromptStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate course")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate course"})
@@ -306,7 +306,11 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 
 	h.db.Where("course_id = ?", req.CourseID).Delete(&models.Slide{})
 
-	for _, slide := range courseStructure.Slides {
+	for i, slide := range courseStructure.Slides {
+		// Fix slide numbering - ensure it starts from 1
+		if slide.SlideNumber == 0 {
+			slide.SlideNumber = i + 1
+		}
 		// Generate image if prompt exists and image generation is enabled
 		var imageURL string
 		if req.GenerateImages && slide.ImagePrompt != "" && h.cfg.OpenAIAPIKey != "" {
