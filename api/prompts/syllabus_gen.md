@@ -27,10 +27,10 @@ Your task is to analyze the provided document content and generate a JSON respon
    - The script should reference what's on the slide but provide much richer detail
    - Think of this as a full transcript of what a presenter would actually say
 
-4. Each slide must have:
+4. Each slide MUST ALWAYS have these REQUIRED fields:
    - A compelling title
    - Concise slide content (what's shown on screen)
-   - **instructor_script** - Full presentation script (what the instructor says - 3-5 paragraphs)
+   - **instructor_script** (REQUIRED - NEVER omit this) - Full presentation script (what the instructor says - 3-5 paragraphs)
    - A detailed image_prompt describing a relevant, professional illustration
    - A layout type: "title", "default", "quote", "highlight", or "comparison"
    - A theme color: "blue", "green", "purple", "orange", or "gradient"
@@ -83,11 +83,13 @@ Return ONLY valid JSON in this exact structure:
 }
 ```
 
-**Important:**
+**CRITICAL REQUIREMENTS:**
 - **Slide content** = Brief, visual content shown on screen
-- **Instructor script** = Full, detailed presentation script (3-5 paragraphs of what instructor says)
+- **Instructor script** = REQUIRED FOR EVERY SLIDE - Full, detailed presentation script (3-5 paragraphs of what instructor says) - DO NOT OMIT THIS FIELD
 - Draw script content from the source document, not just the slide
 - **Question** = Only include if questions are requested; test key concepts from the slide
 - Vary layouts and themes across slides
 - Write detailed image_prompts for DALL-E (be specific about style, subject, mood)
 - Do not include markdown code blocks or extra text outside JSON
+
+**REMINDER: Every slide MUST include the "instructor_script" field with 3-5 paragraphs of presentation content!**
