@@ -100,6 +100,7 @@ function App() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswer[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const handleUpload = async (file: File) => {
     const formData = new FormData()
@@ -263,7 +264,13 @@ function App() {
                   key: String(idx),
                   icon: <FileTextOutlined />,
                   label: `${idx + 1}. ${slide.title}`,
-                  onClick: () => setCurrentSlide(idx),
+                  onClick: () => {
+                    if (audioRef.current) {
+                      audioRef.current.pause()
+                      audioRef.current = null
+                    }
+                    setCurrentSlide(idx)
+                  },
                 }))}
               />
             </div>
@@ -422,8 +429,15 @@ function App() {
                             type="default"
                             icon={<SoundOutlined />}
                             onClick={() => {
+                              // Stop any currently playing audio
+                              if (audioRef.current) {
+                                audioRef.current.pause()
+                                audioRef.current = null
+                              }
+
                               const baseUrl = import.meta.env.DEV ? 'http://localhost:8080' : ''
                               const audio = new Audio(`${baseUrl}${slides[currentSlide].audio_url}`)
+                              audioRef.current = audio
                               audio.play()
 
                               // Auto-advance to next slide when audio finishes
@@ -431,6 +445,7 @@ function App() {
                                 if (currentSlide < slides.length - 1) {
                                   setCurrentSlide(currentSlide + 1)
                                 }
+                                audioRef.current = null
                               }
                             }}
                             size={window.innerWidth > 768 ? 'middle' : 'small'}
@@ -450,7 +465,13 @@ function App() {
                         <Button
                           icon={<LeftOutlined />}
                           disabled={currentSlide === 0}
-                          onClick={() => setCurrentSlide(currentSlide - 1)}
+                          onClick={() => {
+                            if (audioRef.current) {
+                              audioRef.current.pause()
+                              audioRef.current = null
+                            }
+                            setCurrentSlide(currentSlide - 1)
+                          }}
                           size={window.innerWidth > 768 ? 'middle' : 'small'}
                         >
                           {window.innerWidth > 768 ? 'Previous' : ''}
@@ -460,7 +481,13 @@ function App() {
                           icon={<RightOutlined />}
                           iconPosition="end"
                           disabled={currentSlide === slides.length - 1}
-                          onClick={() => setCurrentSlide(currentSlide + 1)}
+                          onClick={() => {
+                            if (audioRef.current) {
+                              audioRef.current.pause()
+                              audioRef.current = null
+                            }
+                            setCurrentSlide(currentSlide + 1)
+                          }}
                           size={window.innerWidth > 768 ? 'middle' : 'small'}
                         >
                           {window.innerWidth > 768 ? 'Next' : ''}
