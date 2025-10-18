@@ -13,12 +13,17 @@ import (
 )
 
 // GenerateVoiceover generates an audio file using OpenAI TTS
-func GenerateVoiceover(apiKey, text, courseID string, slideNumber int) (string, error) {
+func GenerateVoiceover(apiKey, text, courseID, language string, slideNumber int) (string, error) {
 	url := "https://api.openai.com/v1/audio/speech"
+
+	// Select voice based on language for better pronunciation
+	voice := "alloy" // default voice
+	// OpenAI TTS supports multiple languages automatically based on input text
+	// We just use the best general voice for all languages
 
 	reqBody := map[string]interface{}{
 		"model": "tts-1",
-		"voice": "alloy",
+		"voice": voice,
 		"input": text,
 	}
 

@@ -159,6 +159,7 @@ type GenerateCourseRequest struct {
 	GenerateImages    bool   `json:"generate_images"`
 	GenerateVoiceover bool   `json:"generate_voiceover"`
 	GenerateQuestions bool   `json:"generate_questions"`
+	Language          string `json:"language"`
 }
 
 type GenerateCourseResponse struct {
@@ -226,9 +227,27 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 	}
 	systemPromptStr = strings.ReplaceAll(systemPromptStr, "{instructor_style}", instructorPrompt)
 
+	// Determine language for content generation
+	language := req.Language
+	if language == "" {
+		language = "english"
+	}
+
 	userPrompt := fmt.Sprintf("Generate a course with %d slides from this content:\n\n%s", req.NumSlides, contentBuilder.String())
 	if req.GenerateQuestions {
 		userPrompt += "\n\nIMPORTANT: Include a 'question' field for each slide with a multiple choice question."
+	}
+
+	// Add language instruction to user prompt
+	if language != "english" {
+		languageMap := map[string]string{
+			"indonesian": "Indonesian (Bahasa Indonesia)",
+			"thai":       "Thai",
+			"german":     "German",
+		}
+		if langName, ok := languageMap[language]; ok {
+			userPrompt += fmt.Sprintf("\n\nIMPORTANT: Generate ALL content (titles, slide content, instructor scripts, and questions) in %s. Do NOT use English for the course content.", langName)
+		}
 	}
 
 	response, err := h.aiProvider.GenerateText(userPrompt, systemPromptStr)
@@ -276,7 +295,7 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 		// Generate voiceover if instructor script exists and voiceover generation is enabled
 		var audioURL string
 		if req.GenerateVoiceover && slide.InstructorScript != "" && h.cfg.OpenAIAPIKey != "" {
-			generatedAudioURL, err := services.GenerateVoiceover(h.cfg.OpenAIAPIKey, slide.InstructorScript, req.CourseID, slide.SlideNumber)
+			generatedAudioURL, err := services.GenerateVoiceover(h.cfg.OpenAIAPIKey, slide.InstructorScript, req.CourseID, language, slide.SlideNumber)
 			if err != nil {
 				log.Warn().Err(err).Int("slide", slide.SlideNumber).Msg("Failed to generate voiceover")
 			} else {

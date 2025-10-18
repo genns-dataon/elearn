@@ -22,6 +22,7 @@ import {
   Tooltip,
   Modal,
   Checkbox,
+  Select,
 } from 'antd'
 import {
   UploadOutlined,
@@ -95,6 +96,7 @@ function App() {
   const [generateImages, setGenerateImages] = useState(false)
   const [generateVoiceover, setGenerateVoiceover] = useState(false)
   const [generateQuestions, setGenerateQuestions] = useState(false)
+  const [language, setLanguage] = useState('english')
   const [chatOpen, setChatOpen] = useState(true)
   const [notesVisible, setNotesVisible] = useState(false)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -133,6 +135,7 @@ function App() {
         generate_images: generateImages,
         generate_voiceover: generateVoiceover,
         generate_questions: generateQuestions,
+        language: language,
       })
 
       const slidesResponse = await axios.get(`${API_BASE}/slides/${courseId}`)
@@ -342,6 +345,26 @@ function App() {
                   <Text type="secondary">
                     <br />
                     Choose between 3 and 50 slides for your course
+                  </Text>
+                </div>
+                <div>
+                  <Text strong>Content Language:</Text>
+                  <br />
+                  <Select
+                    value={language}
+                    onChange={setLanguage}
+                    size="large"
+                    style={{ width: '100%', marginTop: '8px' }}
+                    options={[
+                      { value: 'english', label: 'English' },
+                      { value: 'indonesian', label: 'Indonesian (Bahasa Indonesia)' },
+                      { value: 'thai', label: 'Thai (ภาษาไทย)' },
+                      { value: 'german', label: 'German (Deutsch)' },
+                    ]}
+                  />
+                  <Text type="secondary">
+                    <br />
+                    Course content and voiceover will be generated in this language
                   </Text>
                 </div>
                 <div>
