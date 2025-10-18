@@ -247,6 +247,7 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 	}
 
 	userPrompt := fmt.Sprintf("Generate a JSON course with %d slides from this content:\n\n%s", req.NumSlides, contentBuilder.String())
+	userPrompt += "\n\nCRITICAL: You MUST include the 'instructor_script' field for EVERY slide with 3-5 paragraphs of presentation content."
 	if req.GenerateQuestions {
 		userPrompt += "\n\nIMPORTANT: Include a 'question' field for each slide with a multiple choice question."
 	}
