@@ -267,10 +267,19 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 	log.Info().Str("response_preview", response[:min(500, len(response))]).Msg("AI response received")
 
 	var courseStructure GeneratedCourseStructure
+
+	// Try to parse directly first
 	if err := json.Unmarshal([]byte(response), &courseStructure); err != nil {
-		log.Error().Err(err).Str("response", response).Msg("Failed to parse course JSON")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse generated course"})
-		return
+		// If that fails, try parsing with "course" wrapper
+		var wrappedResponse struct {
+			Course GeneratedCourseStructure `json:"course"`
+		}
+		if err := json.Unmarshal([]byte(response), &wrappedResponse); err != nil {
+			log.Error().Err(err).Str("response", response).Msg("Failed to parse course JSON")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse generated course"})
+			return
+		}
+		courseStructure = wrappedResponse.Course
 	}
 
 	// Debug log to see what was parsed
