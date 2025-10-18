@@ -246,7 +246,7 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 		}
 	}
 
-	userPrompt := fmt.Sprintf("Generate a course with %d slides from this content:\n\n%s", req.NumSlides, contentBuilder.String())
+	userPrompt := fmt.Sprintf("Generate a JSON course with %d slides from this content:\n\n%s", req.NumSlides, contentBuilder.String())
 	if req.GenerateQuestions {
 		userPrompt += "\n\nIMPORTANT: Include a 'question' field for each slide with a multiple choice question."
 	}
