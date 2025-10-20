@@ -28,12 +28,12 @@ Your task is to analyze the provided document content and generate a JSON respon
    - Think of this as a full transcript of what a presenter would actually say
 
 4. Each slide MUST ALWAYS have these REQUIRED fields:
-   - A compelling title
-   - Concise slide content (what's shown on screen)
+   - **title** (REQUIRED) - A compelling slide title
+   - **content** (REQUIRED) - Concise slide content (what's shown on screen)
    - **instructor_script** (REQUIRED - NEVER omit this) - Full presentation script (what the instructor says - 3-5 paragraphs)
-   - A detailed image_prompt describing a relevant, professional illustration
-   - A layout type: "title", "default", "quote", "highlight", or "comparison"
-   - A theme color: "blue", "green", "purple", "orange", or "gradient"
+   - **image_prompt** (REQUIRED - NEVER omit this) - A detailed, specific description for finding/generating a relevant professional image
+   - **layout** (REQUIRED) - Layout type: "title", "default", "quote", "highlight", or "comparison"
+   - **theme** (REQUIRED) - Theme color: "blue", "green", "purple", "orange", or "gradient"
    - **question** (OPTIONAL - only if questions are requested) - A quiz question with 4 multiple choice options
 
 5. **Live Questions** (if requested):
@@ -54,7 +54,7 @@ Your task is to analyze the provided document content and generate a JSON respon
 - **comparison**: Side-by-side comparisons or contrasts
 
 **Output Format:**
-Return ONLY valid JSON in this exact structure:
+Return ONLY valid JSON in this exact structure. DO NOT change the field names!
 ```json
 {
   "title": "Course Title",
@@ -84,12 +84,15 @@ Return ONLY valid JSON in this exact structure:
 ```
 
 **CRITICAL REQUIREMENTS:**
-- **Slide content** = Brief, visual content shown on screen
+- **USE EXACT FIELD NAMES**: title, content, instructor_script, image_prompt, layout, theme, question - DO NOT rename these fields!
+- **Slide content** = Brief, visual content shown on screen (field name: "content", NOT "slide_content")
+- **Slide title** = Title of the slide (field name: "title", NOT "slide_title")
 - **Instructor script** = REQUIRED FOR EVERY SLIDE - Full, detailed presentation script (3-5 paragraphs of what instructor says) - DO NOT OMIT THIS FIELD
 - Draw script content from the source document, not just the slide
 - **Question** = Only include if questions are requested; test key concepts from the slide
 - Vary layouts and themes across slides
 - Write detailed image_prompts for DALL-E (be specific about style, subject, mood)
 - Do not include markdown code blocks or extra text outside JSON
+- IMPORTANT: Use "title" and "content", NOT "slide_title" or "slide_content"
 
 **REMINDER: Every slide MUST include the "instructor_script" field with 3-5 paragraphs of presentation content!**

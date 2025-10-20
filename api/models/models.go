@@ -11,10 +11,20 @@ type Course struct {
 	ID          string    `gorm:"primaryKey" json:"id"`
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
-	PDFName     string    `json:"pdf_name"`
+	PDFName     string    `json:"pdf_name"` // Deprecated: use SourceFiles instead
 	NumSlides   int       `json:"num_slides"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// SourceFile represents a PDF file uploaded for a course (supports multiple files per course)
+type SourceFile struct {
+	ID        string    `gorm:"primaryKey" json:"id"`
+	CourseID  string    `gorm:"index" json:"course_id"`
+	Filename  string    `json:"filename"`
+	FilePath  string    `json:"file_path"`
+	FileSize  int64     `json:"file_size"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Slide represents a single slide in a course
@@ -36,12 +46,13 @@ type Slide struct {
 
 // Chunk represents a text chunk from a PDF with metadata
 type Chunk struct {
-	ID        string    `gorm:"primaryKey" json:"id"`
-	CourseID  string    `gorm:"index" json:"course_id"`
-	Content   string    `json:"content"`
-	ChunkNum  int       `json:"chunk_num"`
-	PageNum   int       `json:"page_num,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           string    `gorm:"primaryKey" json:"id"`
+	CourseID     string    `gorm:"index" json:"course_id"`
+	SourceFileID string    `gorm:"index" json:"source_file_id,omitempty"` // Which file this chunk came from
+	Content      string    `json:"content"`
+	ChunkNum     int       `json:"chunk_num"`
+	PageNum      int       `json:"page_num,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // Embedding represents a vector embedding for a chunk
@@ -78,6 +89,7 @@ type Question struct {
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&Course{},
+		&SourceFile{},
 		&Slide{},
 		&Chunk{},
 		&Embedding{},

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,11 +80,28 @@ func (h *Handler) UploadPDF(c *gin.Context) {
 		return
 	}
 
-	courseID := uuid.New().String()
+	// Check if course_id is provided (for adding files to an existing course)
+	courseID := c.PostForm("course_id")
+	isNewCourse := false
+
+	if courseID == "" {
+		// New course - generate a new ID
+		courseID = uuid.New().String()
+		isNewCourse = true
+	} else {
+		// Verify the course exists
+		var existingCourse models.Course
+		if err := h.db.Where("id = ?", courseID).First(&existingCourse).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+			return
+		}
+	}
+
 	uploadDir := "./storage/uploads"
 	os.MkdirAll(uploadDir, 0755)
 
-	filepath := filepath.Join(uploadDir, fmt.Sprintf("%s_%s", courseID, file.Filename))
+	sourceFileID := uuid.New().String()
+	filepath := filepath.Join(uploadDir, fmt.Sprintf("%s_%s", sourceFileID, file.Filename))
 	if err := c.SaveUploadedFile(file, filepath); err != nil {
 		log.Error().Err(err).Msg("Failed to save file")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
@@ -99,26 +117,45 @@ func (h *Handler) UploadPDF(c *gin.Context) {
 
 	chunks := services.ChunkText(text)
 
-	course := &models.Course{
-		ID:        courseID,
-		PDFName:   file.Filename,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	// Create course record only if this is a new course
+	if isNewCourse {
+		course := &models.Course{
+			ID:        courseID,
+			PDFName:   file.Filename, // Legacy field - first uploaded file
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		if err := h.db.Create(course).Error; err != nil {
+			log.Error().Err(err).Msg("Failed to create course")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create course"})
+			return
+		}
 	}
-	if err := h.db.Create(course).Error; err != nil {
-		log.Error().Err(err).Msg("Failed to create course")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create course"})
+
+	// Create source file record
+	sourceFile := &models.SourceFile{
+		ID:        sourceFileID,
+		CourseID:  courseID,
+		Filename:  file.Filename,
+		FilePath:  filepath,
+		FileSize:  file.Size,
+		CreatedAt: time.Now(),
+	}
+	if err := h.db.Create(sourceFile).Error; err != nil {
+		log.Error().Err(err).Msg("Failed to create source file record")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create source file record"})
 		return
 	}
 
 	for i, chunk := range chunks {
 		chunkID := uuid.New().String()
 		chunkModel := &models.Chunk{
-			ID:        chunkID,
-			CourseID:  courseID,
-			Content:   chunk,
-			ChunkNum:  i,
-			CreatedAt: time.Now(),
+			ID:           chunkID,
+			CourseID:     courseID,
+			SourceFileID: sourceFileID,
+			Content:      chunk,
+			ChunkNum:     i,
+			CreatedAt:    time.Now(),
 		}
 		if err := h.db.Create(chunkModel).Error; err != nil {
 			log.Warn().Err(err).Int("chunk", i).Msg("Failed to save chunk")
@@ -153,13 +190,16 @@ func (h *Handler) UploadPDF(c *gin.Context) {
 }
 
 type GenerateCourseRequest struct {
-	CourseID          string `json:"course_id" binding:"required"`
-	NumSlides         int    `json:"num_slides" binding:"required,min=3,max=50"`
-	InstructorPrompt  string `json:"instructor_prompt"`
-	GenerateImages    bool   `json:"generate_images"`
-	GenerateVoiceover bool   `json:"generate_voiceover"`
-	GenerateQuestions bool   `json:"generate_questions"`
-	Language          string `json:"language"`
+	CourseID           string `json:"course_id" binding:"required"`
+	NumSlides          int    `json:"num_slides" binding:"required,min=3,max=50"`
+	PresentationStyle  string `json:"presentation_style"`
+	InstructorPrompt   string `json:"instructor_prompt"`
+	GenerateImages     bool   `json:"generate_images"`
+	UseWebImages       bool   `json:"use_web_images"`
+	UseDalle           bool   `json:"use_dalle"`
+	GenerateVoiceover  bool   `json:"generate_voiceover"`
+	GenerateQuestions  bool   `json:"generate_questions"`
+	Language           string `json:"language"`
 }
 
 type GenerateCourseResponse struct {
@@ -174,20 +214,22 @@ type GeneratedCourseStructure struct {
 }
 
 type GeneratedSlide struct {
-	SlideNumber      int              `json:"slide_number"`
-	Title            string           `json:"title"`
-	Content          string           `json:"content"`
-	InstructorScript string           `json:"instructor_script,omitempty"`
-	ImagePrompt      string           `json:"image_prompt,omitempty"`
-	Layout           string           `json:"layout,omitempty"`
-	Theme            string           `json:"theme,omitempty"`
-	Question         *GeneratedQuestion `json:"question,omitempty"`
+	SlideNumber      int                     `json:"slide_number"`
+	Title            string                  `json:"title"`
+	Content          string                  `json:"content"`
+	InstructorScript string                  `json:"instructor_script,omitempty"`
+	ImagePrompt      string                  `json:"image_prompt,omitempty"`
+	Layout           string                  `json:"layout,omitempty"`
+	Theme            string                  `json:"theme,omitempty"`
+	Question         json.RawMessage         `json:"question,omitempty"` // Use RawMessage to handle inconsistent format
+	ParsedQuestion   *GeneratedQuestion      `json:"-"`                  // Parsed question data
 }
 
 type GeneratedQuestion struct {
-	Question      string   `json:"question"`
-	Options       []string `json:"options"`
-	CorrectAnswer int      `json:"correct_answer"`
+	Question            string      `json:"question"`
+	Options             []string    `json:"options"`
+	CorrectAnswerRaw    interface{} `json:"correct_answer"` // Can be int or string
+	CorrectAnswerParsed int         `json:"-"`              // Parsed index
 }
 
 func (h *Handler) GenerateCourse(c *gin.Context) {
@@ -209,17 +251,50 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 	}
 
 	contentBuilder := strings.Builder{}
+	const maxContentLength = 12000 // Limit total content to ~12k characters to avoid Cloudflare blocking
+	const maxChunks = 5             // Limit to 5 chunks maximum
 	for i, chunk := range chunks {
-		if i >= 10 {
+		if i >= maxChunks {
+			break
+		}
+		// Check if adding this chunk would exceed the limit
+		if contentBuilder.Len()+len(chunk.Content) > maxContentLength {
+			log.Info().Int("chunks_used", i).Int("total_length", contentBuilder.Len()).Msg("Reached content length limit")
 			break
 		}
 		contentBuilder.WriteString(chunk.Content)
 		contentBuilder.WriteString("\n\n")
 	}
 
+	log.Info().
+		Int("total_content_length", contentBuilder.Len()).
+		Bool("generate_images", req.GenerateImages).
+		Bool("use_web_images", req.UseWebImages).
+		Bool("use_dalle", req.UseDalle).
+		Bool("generate_voiceover", req.GenerateVoiceover).
+		Bool("generate_questions", req.GenerateQuestions).
+		Msg("Content prepared for course generation")
+
 	systemPrompt, _ := os.ReadFile("./api/prompts/syllabus_gen.md")
 	systemPromptStr := string(systemPrompt)
 	systemPromptStr = strings.ReplaceAll(systemPromptStr, "{num_slides}", fmt.Sprintf("%d", req.NumSlides))
+
+	// Apply presentation style guidelines
+	presentationStyle := req.PresentationStyle
+	if presentationStyle == "" {
+		presentationStyle = "balanced"
+	}
+
+	styleInstructions := map[string]string{
+		"minimal": "MINIMAL & VISUAL STYLE:\n- Use VERY SHORT, punchy text (2-3 sentences max per slide)\n- Focus on bold statements and key takeaways\n- Emphasize visual impact with striking image prompts\n- Modern, clean design aesthetic\n- Generate vivid, eye-catching image prompts for modern stock photos",
+		"balanced": "BALANCED STYLE:\n- Use moderate amount of text (4-6 sentences per slide)\n- Mix of explanations and key points\n- Balance between text and visual elements\n- Professional yet accessible\n- Generate clear, relevant image prompts for professional stock photos",
+		"detailed": "DETAILED & PROFESSIONAL STYLE:\n- Use comprehensive, information-rich content with 5-8 bullet points per slide\n- Format content as clear bullet points (use '-' or '•' prefix)\n- Each bullet should be a complete, detailed point with specific information\n- Include specific examples, data points, and thorough coverage\n- Professional corporate presentation aesthetic with substantial on-screen text\n- Information-dense slides suitable for detailed handouts\n- Generate businesslike, professional image prompts for corporate stock photos",
+		"fun": "FUN & ENTERTAINING STYLE:\n- Use MINIMAL text with playful, engaging language (2-4 sentences)\n- Emphasize entertainment value and engagement\n- Light, fun tone throughout\n- Use creative, unexpected angles\n- Generate playful, colorful, dynamic image prompts for fun stock photos",
+	}
+
+	if styleGuide, ok := styleInstructions[presentationStyle]; ok {
+		systemPromptStr += "\n\n" + styleGuide
+	}
 
 	instructorPrompt := req.InstructorPrompt
 	if instructorPrompt == "" {
@@ -249,7 +324,7 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 	userPrompt := fmt.Sprintf("Generate a JSON course with %d slides from this content:\n\n%s", req.NumSlides, contentBuilder.String())
 	userPrompt += "\n\nCRITICAL: You MUST include the 'instructor_script' field for EVERY slide with 3-5 paragraphs of presentation content."
 	if req.GenerateQuestions {
-		userPrompt += "\n\nIMPORTANT: Include a 'question' field for each slide with a multiple choice question."
+		userPrompt += "\n\nIMPORTANT: Include a 'question' field for EVERY slide. The question MUST be a JSON object (not a string) with this exact structure:\n{\n  \"question\": \"Question text here?\",\n  \"options\": [\"Option 1\", \"Option 2\", \"Option 3\", \"Option 4\"],\n  \"correct_answer\": 0\n}\nDo NOT use a string for the question field. It must be a JSON object."
 	}
 
 	response, err := h.aiProvider.GenerateJSON(userPrompt, systemPromptStr)
@@ -269,18 +344,66 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 
 	var courseStructure GeneratedCourseStructure
 
-	// OpenAI wraps response in "course" object, try that first
+	// Try to parse the response - handle multiple formats
 	var wrappedResponse struct {
 		Course GeneratedCourseStructure `json:"course"`
 	}
-	if err := json.Unmarshal([]byte(response), &wrappedResponse); err == nil && len(wrappedResponse.Course.Slides) > 0 {
-		courseStructure = wrappedResponse.Course
+
+	// Also handle array format {"course":[...]}
+	var arrayResponse struct {
+		Course []GeneratedSlide `json:"course"`
+	}
+
+	// First try wrapped format (OpenAI) - {"course":{"title":"","slides":[...]}}
+	if err := json.Unmarshal([]byte(response), &wrappedResponse); err == nil {
+		log.Info().
+			Int("wrapped_slides_count", len(wrappedResponse.Course.Slides)).
+			Str("wrapped_title", wrappedResponse.Course.Title).
+			Msg("Successfully unmarshaled to wrapped format")
+
+		if len(wrappedResponse.Course.Slides) > 0 {
+			courseStructure = wrappedResponse.Course
+			log.Info().Msg("Parsed wrapped course structure (OpenAI format)")
+		} else {
+			log.Warn().Msg("Wrapped structure parsed but no slides found, trying other formats")
+			// Try array format {"course":[...]}
+			if err := json.Unmarshal([]byte(response), &arrayResponse); err == nil && len(arrayResponse.Course) > 0 {
+				courseStructure.Slides = arrayResponse.Course
+				log.Info().
+					Int("array_slides_count", len(arrayResponse.Course)).
+					Msg("Parsed array format")
+			} else {
+				// Try direct format
+				if err := json.Unmarshal([]byte(response), &courseStructure); err != nil {
+					log.Error().Err(err).Str("response", response).Msg("Failed to parse course JSON in all formats")
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse generated course"})
+					return
+				}
+				log.Info().
+					Int("direct_slides_count", len(courseStructure.Slides)).
+					Str("direct_title", courseStructure.Title).
+					Msg("Parsed direct course structure")
+			}
+		}
 	} else {
-		// Fall back to direct parsing (for Anthropic)
-		if err := json.Unmarshal([]byte(response), &courseStructure); err != nil {
-			log.Error().Err(err).Str("response", response).Msg("Failed to parse course JSON")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse generated course"})
-			return
+		log.Warn().Err(err).Msg("Failed to parse wrapped format, trying other formats")
+		// Try array format {"course":[...]}
+		if err := json.Unmarshal([]byte(response), &arrayResponse); err == nil && len(arrayResponse.Course) > 0 {
+			courseStructure.Slides = arrayResponse.Course
+			log.Info().
+				Int("array_slides_count", len(arrayResponse.Course)).
+				Msg("Parsed array format")
+		} else {
+			// Fall back to direct parsing (for Anthropic)
+			if err := json.Unmarshal([]byte(response), &courseStructure); err != nil {
+				log.Error().Err(err).Str("response", response).Msg("Failed to parse course JSON")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse generated course"})
+				return
+			}
+			log.Info().
+				Int("direct_slides_count", len(courseStructure.Slides)).
+				Str("direct_title", courseStructure.Title).
+				Msg("Parsed direct course structure (Anthropic format)")
 		}
 	}
 
@@ -308,18 +431,86 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 	h.db.Where("course_id = ?", req.CourseID).Delete(&models.Slide{})
 
 	for i, slide := range courseStructure.Slides {
+		// Parse question if it exists
+		if len(slide.Question) > 0 {
+			var parsedQ GeneratedQuestion
+			if err := json.Unmarshal(slide.Question, &parsedQ); err != nil {
+				log.Warn().Err(err).Int("slide", i+1).Str("question_raw", string(slide.Question)).Msg("Failed to parse question, skipping")
+			} else {
+				// Convert correct_answer to index
+				switch v := parsedQ.CorrectAnswerRaw.(type) {
+				case float64:
+					// Already a number
+					parsedQ.CorrectAnswerParsed = int(v)
+				case string:
+					// Try to parse as number first
+					if idx, err := strconv.Atoi(v); err == nil {
+						parsedQ.CorrectAnswerParsed = idx
+					} else {
+						// It's a text answer - find matching option
+						foundIndex := -1
+						for optIdx, opt := range parsedQ.Options {
+							if strings.TrimSpace(strings.ToLower(opt)) == strings.TrimSpace(strings.ToLower(v)) {
+								foundIndex = optIdx
+								break
+							}
+						}
+						if foundIndex >= 0 {
+							parsedQ.CorrectAnswerParsed = foundIndex
+						} else {
+							log.Warn().
+								Str("correct_answer_text", v).
+								Int("slide", i+1).
+								Msg("Could not match correct_answer text to any option, defaulting to 0")
+							parsedQ.CorrectAnswerParsed = 0
+						}
+					}
+				default:
+					log.Warn().Int("slide", i+1).Msg("Unknown correct_answer type, defaulting to 0")
+					parsedQ.CorrectAnswerParsed = 0
+				}
+				slide.ParsedQuestion = &parsedQ
+			}
+		}
+
 		// Fix slide numbering - ensure it starts from 1
 		if slide.SlideNumber == 0 {
 			slide.SlideNumber = i + 1
 		}
+
+		// Determine slide template and theme based on content
+		isTitle := slide.SlideNumber == 1 || strings.ToLower(slide.Layout) == "title"
+		hasImage := req.GenerateImages && slide.ImagePrompt != ""
+		template := services.GetSlideTemplate(slide.SlideNumber, slide.Title, slide.Content, isTitle, hasImage)
+
+		// Apply template to slide if not already set
+		if slide.Layout == "" {
+			slide.Layout = template.Layout
+		}
+		if slide.Theme == "" {
+			slide.Theme = template.Theme
+		}
+
 		// Generate image if prompt exists and image generation is enabled
 		var imageURL string
-		if req.GenerateImages && slide.ImagePrompt != "" && h.cfg.OpenAIAPIKey != "" {
-			generatedURL, err := services.GenerateImage(h.cfg.OpenAIAPIKey, slide.ImagePrompt)
+		log.Info().
+			Int("slide", slide.SlideNumber).
+			Bool("req_generate_images", req.GenerateImages).
+			Str("image_prompt", slide.ImagePrompt).
+			Bool("will_generate_image", req.GenerateImages && slide.ImagePrompt != "").
+			Msg("Image generation check")
+
+		if req.GenerateImages && slide.ImagePrompt != "" {
+			// Enhance the image prompt based on template
+			enhancedPrompt := services.GetImagePromptEnhanced(slide.ImagePrompt, template)
+
+			// Use the new intelligent image fetching
+			var err error
+			imageURL, err = services.GetImageForSlide(enhancedPrompt, req.UseWebImages, req.UseDalle, h.cfg.OpenAIAPIKey)
 			if err != nil {
-				log.Warn().Err(err).Int("slide", slide.SlideNumber).Msg("Failed to generate image")
+				log.Warn().Err(err).Int("slide", slide.SlideNumber).Msg("Failed to get image")
 			} else {
-				imageURL = generatedURL
+				log.Info().Str("url", imageURL).Int("slide", slide.SlideNumber).Msg("Image obtained for slide")
 			}
 		}
 
@@ -354,15 +545,15 @@ func (h *Handler) GenerateCourse(c *gin.Context) {
 			log.Warn().Err(err).Msg("Failed to save slide")
 		}
 
-		// Save question if it exists
-		if slide.Question != nil {
-			optionsJSON, _ := json.Marshal(slide.Question.Options)
+		// Save question if it exists and was successfully parsed
+		if slide.ParsedQuestion != nil {
+			optionsJSON, _ := json.Marshal(slide.ParsedQuestion.Options)
 			questionModel := &models.Question{
 				ID:            uuid.New().String(),
 				SlideID:       slideID,
-				Question:      slide.Question.Question,
+				Question:      slide.ParsedQuestion.Question,
 				Options:       string(optionsJSON),
-				CorrectAnswer: slide.Question.CorrectAnswer,
+				CorrectAnswer: slide.ParsedQuestion.CorrectAnswerParsed,
 				CreatedAt:     time.Now(),
 			}
 			if err := h.db.Create(questionModel).Error; err != nil {
@@ -401,6 +592,72 @@ func (h *Handler) GetSlides(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"course_id": courseID,
 		"slides":    slides,
+	})
+}
+
+func (h *Handler) GetSourceFiles(c *gin.Context) {
+	courseID := c.Param("courseId")
+
+	var files []models.SourceFile
+	if err := h.db.Where("course_id = ?", courseID).Order("created_at ASC").Find(&files).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve files"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"course_id": courseID,
+		"files":     files,
+	})
+}
+
+func (h *Handler) DeleteSourceFile(c *gin.Context) {
+	courseID := c.Param("courseId")
+	fileID := c.Param("fileId")
+
+	// Get the source file
+	var sourceFile models.SourceFile
+	if err := h.db.Where("id = ? AND course_id = ?", fileID, courseID).First(&sourceFile).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+
+	// Delete associated chunks and their embeddings
+	var chunks []models.Chunk
+	h.db.Where("source_file_id = ?", fileID).Find(&chunks)
+
+	for _, chunk := range chunks {
+		// Delete embeddings for this chunk
+		h.db.Where("chunk_id = ?", chunk.ID).Delete(&models.Embedding{})
+	}
+
+	// Delete chunks
+	h.db.Where("source_file_id = ?", fileID).Delete(&models.Chunk{})
+
+	// Delete the physical file
+	if err := os.Remove(sourceFile.FilePath); err != nil {
+		log.Warn().Err(err).Str("file_path", sourceFile.FilePath).Msg("Failed to delete physical file")
+	}
+
+	// Delete the source file record
+	if err := h.db.Delete(&sourceFile).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete file record"})
+		return
+	}
+
+	// Check if this was the last file for the course
+	var remainingFiles []models.SourceFile
+	h.db.Where("course_id = ?", courseID).Find(&remainingFiles)
+
+	if len(remainingFiles) == 0 {
+		// Delete the entire course and all related data
+		h.db.Where("course_id = ?", courseID).Delete(&models.Slide{})
+		h.db.Where("course_id = ?", courseID).Delete(&models.ChatMessage{})
+		h.db.Delete(&models.Course{}, "id = ?", courseID)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":         "File deleted successfully",
+		"files_remaining": len(remainingFiles),
 	})
 }
 

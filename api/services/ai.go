@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // AIProvider is the interface for AI model providers
@@ -57,7 +58,7 @@ func (a *AnthropicProvider) GenerateText(prompt string, systemPrompt string) (st
 
 	reqBody := map[string]interface{}{
 		"model":      a.Model,
-		"max_tokens": 4096,
+		"max_tokens": 16384,
 		"system":     systemPrompt,
 		"messages": []map[string]string{
 			{"role": "user", "content": prompt},
@@ -78,10 +79,35 @@ func (a *AnthropicProvider) GenerateText(prompt string, systemPrompt string) (st
 	req.Header.Set("x-api-key", a.APIKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	// Use longer timeout with retry logic
+	client := &http.Client{
+		Timeout: 5 * time.Minute,
+		Transport: &http.Transport{
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
+
+	// Retry logic for transient network errors
+	var resp *http.Response
+	var lastErr error
+	maxRetries := 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(1<<uint(attempt)) * time.Second
+			time.Sleep(backoff)
+		}
+
+		resp, err = client.Do(req)
+		if err == nil {
+			break
+		}
+		lastErr = err
+	}
+
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return "", fmt.Errorf("failed to send request after %d attempts: %w", maxRetries, lastErr)
 	}
 	defer resp.Body.Close()
 
@@ -130,7 +156,7 @@ func (o *OpenAIProvider) GenerateText(prompt string, systemPrompt string) (strin
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": prompt},
 		},
-		"max_tokens": 4096,
+		"max_tokens": 16384,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -146,10 +172,35 @@ func (o *OpenAIProvider) GenerateText(prompt string, systemPrompt string) (strin
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", o.APIKey))
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	// Use longer timeout with retry logic
+	client := &http.Client{
+		Timeout: 5 * time.Minute,
+		Transport: &http.Transport{
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
+
+	// Retry logic for transient network errors
+	var resp *http.Response
+	var lastErr error
+	maxRetries := 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(1<<uint(attempt)) * time.Second
+			time.Sleep(backoff)
+		}
+
+		resp, err = client.Do(req)
+		if err == nil {
+			break
+		}
+		lastErr = err
+	}
+
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return "", fmt.Errorf("failed to send request after %d attempts: %w", maxRetries, lastErr)
 	}
 	defer resp.Body.Close()
 
@@ -191,7 +242,7 @@ func (o *OpenAIProvider) GenerateJSON(prompt string, systemPrompt string) (strin
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": prompt},
 		},
-		"max_tokens": 4096,
+		"max_tokens": 16384,
 		"response_format": map[string]string{
 			"type": "json_object",
 		},
@@ -210,10 +261,36 @@ func (o *OpenAIProvider) GenerateJSON(prompt string, systemPrompt string) (strin
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", o.APIKey))
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	// Use longer timeout for course generation which can take several minutes
+	client := &http.Client{
+		Timeout: 5 * time.Minute,
+		Transport: &http.Transport{
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
+
+	// Retry logic for transient network errors
+	var resp *http.Response
+	var lastErr error
+	maxRetries := 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 2s, 4s
+			backoff := time.Duration(1<<uint(attempt)) * time.Second
+			time.Sleep(backoff)
+		}
+
+		resp, err = client.Do(req)
+		if err == nil {
+			break
+		}
+		lastErr = err
+	}
+
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return "", fmt.Errorf("failed to send request after %d attempts: %w", maxRetries, lastErr)
 	}
 	defer resp.Body.Close()
 

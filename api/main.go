@@ -62,6 +62,8 @@ func main() {
 		api.POST("/course/generate", h.GenerateCourse)
 		api.GET("/course/:courseId", h.GetCourse)
 		api.GET("/slides/:courseId", h.GetSlides)
+		api.GET("/files/:courseId", h.GetSourceFiles)
+		api.DELETE("/files/:courseId/:fileId", h.DeleteSourceFile)
 		api.GET("/questions/:courseId", h.GetQuestions)
 		api.POST("/chat/ask", h.ChatAsk)
 	}
